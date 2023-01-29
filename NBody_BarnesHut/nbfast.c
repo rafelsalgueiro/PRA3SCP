@@ -2,7 +2,7 @@
 Práctica 1.
 Código fuente : nbfast.c
 Grau Informàtica
-Rafel Salgueiro Santacreu 48257208B
+Rafel Salgueiro Santacreu 48257208B 
 --------------------------------------------------------------- */
 
 #include <stdio.h>
