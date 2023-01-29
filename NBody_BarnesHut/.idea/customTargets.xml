@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CLionExternalBuildManager">
+    <target id="3d0ce5a1-af0c-4bd6-b285-40845d7d8add" name="NBody_gui" defaultType="TOOL">
+      <configuration id="333e4fa3-fd8a-422d-a8e1-890933840164" name="NBody_gui">
+        <build type="TOOL">
+          <tool actionId="Tool_External Tools_make_gui" />
+        </build>
+        <clean type="TOOL">
+          <tool actionId="Tool_External Tools_make_clean" />
+        </clean>
+      </configuration>
+    </target>
+    <target id="eab76b7c-fe99-4c7f-b9c5-19d0b53bff30" name="Nbody_nogui" defaultType="TOOL">
+      <configuration id="ec81f6c5-2644-496a-b88d-9f72901d037a" name="Nbody_nogui">
+        <build type="TOOL">
+          <tool actionId="Tool_External Tools_make_nogui" />
+        </build>
+        <clean type="TOOL">
+          <tool actionId="Tool_External Tools_make_clean" />
+        </clean>
+      </configuration>
+    </target>
+  </component>
+</project>
