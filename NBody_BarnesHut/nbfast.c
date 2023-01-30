@@ -413,7 +413,6 @@ void ReadGalaxyFile(char *filename, int *nShared, int **indexes, double **shared
 }
 
 void threadFunction(globalVariablesPtr gV){
-    
     //unpack global variables
     struct Node* tree = gV->tree;
     int id = gV->id;
@@ -424,14 +423,20 @@ void threadFunction(globalVariablesPtr gV){
     double *sharedBuff = gV->sharedBuff;
     double *localBuff = gV->localBuff;
 
-
     int from;
     int to;
     int particlesPerThread = nShared/possibleThreads;
-
-    from = id * particlesPerThread;
+    printf ("nShared: %d", nShared);
+    printf ("id: %d\n", id);
+    from = (id-1) * particlesPerThread;
     to = from + particlesPerThread;
-    if (id != -1) to--;
+    printf ("possibleThreads: %d", possibleThreads);
+    if (id != possibleThreads ) to--;
+    printf ("from: %d\n", from);
+    printf ("to: %d\n", to);
+    while (1){
+
+    }
 }
 
 #define DSaveIntermediateState 1
@@ -517,7 +522,6 @@ int main(int argc, char *argv[]){
         possiblePthreads = atoi(argv[4]);
     }
 
-
     int nLocal=nShared;
     int nOriginal=nShared;
     //Buffer to hold velocity in x and y, and acceleration in x and y also
@@ -559,19 +563,19 @@ int main(int argc, char *argv[]){
 
 
     for (int i = 0; i < possiblePthreads; i++){
-        globalVars->possibleThreads = possiblePthreads;
-        globalVars->nShared = nShared;
-        globalVars->localBuff = localBuff;
-        globalVars->indexes = indexes;
-        globalVars->sharedBuff = sharedBuff;
-        globalVars->tree = tree;
-        globalVars->steps = steps;
-        globalVars->id = i+1;
-        if (pthread_create(&threads[i], NULL, (void *(*)(void *)) threadFunction, (void *)&globalVars)){
+        globalVars[i].possibleThreads = possiblePthreads;
+        globalVars[i].nShared = nShared;
+        globalVars[i].localBuff = localBuff;
+        globalVars[i].indexes = indexes;
+        globalVars[i].sharedBuff = sharedBuff;
+        globalVars[i].tree = tree;
+        globalVars[i].steps = steps;
+        globalVars[i].id = i+1;
+
+        if (pthread_create(&threads[i], NULL, (void *(*)(void *)) threadFunction, (void *)&globalVars[i])){
             perror("Error creating threads");
         }
     }
-
     int count=1;
 	//If we need to visualize
 #ifdef D_GLFW_SUPPORT
