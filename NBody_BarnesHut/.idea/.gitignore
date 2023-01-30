@@ -2,7 +2,7 @@
 /shelf/
 /workspace.xml
 #Ignore the res folder
-res/
+NBody_BarnesHut/res/
 # Editor-based HTTP Client requests
 /httpRequests/
 # Datasource local storage ignored files
