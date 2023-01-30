@@ -1,7 +1,6 @@
 # Default ignored files
 /shelf/
 /workspace.xml
-**.out
 # Editor-based HTTP Client requests
 /httpRequests/
 # Datasource local storage ignored files

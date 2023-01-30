@@ -34,8 +34,6 @@ double dt=0.005;
 double rcutoff=0.35;
 double rlimit=0.03;
 
-pthread_t *threads;
-
 struct Node{
     struct Node *children[4];
     int external;
@@ -53,6 +51,18 @@ struct Node{
     double GCY;
 };
 
+struct globalVariables{
+    struct Node* tree;
+    int nShared;
+	int steps;
+    double *sharedBuff;
+    double *localBuff;
+    int *indexes;
+    int possibleThreads;
+    int id;
+};
+typedef struct globalVariables globalVariables, *globalVariablesPtr;
+
 struct threadBT{
     struct Node* node;
     double* shrdBuff;
@@ -61,6 +71,12 @@ struct threadBT{
     int Threads;
 };
 typedef struct threadBT threadBT, *threadBTptr;
+
+
+
+pthread_t *threads;
+globalVariablesPtr globalVars;
+
 
 void *buildTreeThread (threadBTptr job);
 
@@ -396,6 +412,28 @@ void ReadGalaxyFile(char *filename, int *nShared, int **indexes, double **shared
     fclose(input);
 }
 
+void threadFunction(globalVariablesPtr gV){
+    
+    //unpack global variables
+    struct Node* tree = gV->tree;
+    int id = gV->id;
+    int possibleThreads = gV->possibleThreads;
+    int nShared = gV->nShared;
+    int steps = gV->steps;
+    int *indexes = gV->indexes;
+    double *sharedBuff = gV->sharedBuff;
+    double *localBuff = gV->localBuff;
+
+
+    int from;
+    int to;
+    int particlesPerThread = nShared/possibleThreads;
+
+    from = id * particlesPerThread;
+    to = from + particlesPerThread;
+    if (id != -1) to--;
+}
+
 #define DSaveIntermediateState 1
 #define DIntervalIntermediateState 100
 #define DShowStatistics 1
@@ -431,7 +469,7 @@ int main(int argc, char *argv[]){
     double *radius;
     int *indexes, i;
     char filename[100];
-    int possiblePthreas = 4;
+    int possiblePthreads = 4;
     
 
     printf("NBody with %d arguments.\n",argc);
@@ -476,7 +514,7 @@ int main(int argc, char *argv[]){
 
     if (argc>4)         //Si se le assigna un nombre de threads
     {
-        possiblePthreas = atoi(argv[4]);
+        possiblePthreads = atoi(argv[4]);
     }
 
 
@@ -516,6 +554,24 @@ int main(int argc, char *argv[]){
     sprintf(filename,"./res/galaxy_%dB_initial.out",nOriginal);
     SaveGalaxyFile(filename, nShared, indexes, sharedBuff);
 
+    threads = malloc(sizeof(pthread_t) * possiblePthreads);
+    globalVars = malloc(sizeof(globalVariables) * possiblePthreads);
+
+
+    for (int i = 0; i < possiblePthreads; i++){
+        globalVars->possibleThreads = possiblePthreads;
+        globalVars->nShared = nShared;
+        globalVars->localBuff = localBuff;
+        globalVars->indexes = indexes;
+        globalVars->sharedBuff = sharedBuff;
+        globalVars->tree = tree;
+        globalVars->steps = steps;
+        globalVars->id = i+1;
+        if (pthread_create(&threads[i], NULL, (void *(*)(void *)) threadFunction, (void *)&globalVars)){
+            perror("Error creating threads");
+        }
+    }
+
     int count=1;
 	//If we need to visualize
 #ifdef D_GLFW_SUPPORT
@@ -543,7 +599,7 @@ int main(int argc, char *argv[]){
 
 			double t=glfwGetTime();
 			//We build the tree, which needs a pointer to the initial node, the buffer holding position and mass of the particles, indexes and number of particles
-        	buildTree(tree,sharedBuff,indexes,nShared, possiblePthreas);
+        	buildTree(tree,sharedBuff,indexes,nShared, possiblePthreads);
         	//Now that it is built, we calculate the forces per particle
 			for(i=0;i<nLocal;i++){
 				//First we make them zero in both directions
@@ -598,7 +654,7 @@ int main(int argc, char *argv[]){
 		//system("mkdir res");
     	while(count<=steps){
 			//First we build the tree
-        	buildTree(tree,sharedBuff,indexes,nShared, possiblePthreas);
+        	buildTree(tree,sharedBuff,indexes,nShared, possiblePthreads);
         	for(i=0;i<nLocal;i++){
 				//Set initial accelerations to zero
             	localBuff[AX(indexes[i])]=0;
