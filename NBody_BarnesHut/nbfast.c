@@ -2,7 +2,7 @@
 Práctica 1.
 Código fuente : nbfast.c
 Grau Informàtica
-Rafel Salgueiro Santacreu 48257208B 
+Rafel Salgueiro Santacreu 48257208B
 --------------------------------------------------------------- */
 
 #include <stdio.h>
@@ -33,9 +33,8 @@ double G=0.0001;
 double dt=0.005;
 double rcutoff=0.35;
 double rlimit=0.03;
-pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-sem_t sem;
 
+pthread_t *threads;
 
 struct Node{
     struct Node *children[4];
@@ -69,8 +68,6 @@ void buildTree(struct Node* node, double* shrdBuff, int *indexes, int n, int MTh
     pthread_t *MiTids = NULL;
     threadBTptr MiJobs = NULL;
     int Jobs, NewThreads = 0, RemainingThreads = 0, PendingThreads = 0, CurrentJob = 0;
-    sem_init(&sem, 0, 1);                               //se inicializa el semaforo
-    pthread_mutex_init(&mutex, NULL);                   //se inicializa el mutex
 
     if(n==1){ //This is an external node!
         node->external=1;
@@ -110,8 +107,6 @@ void buildTree(struct Node* node, double* shrdBuff, int *indexes, int n, int MTh
         }
         if (MThreads > 0){              //si hay hilos disponibles
 
-            sem_wait(&sem);                             //se bloquea el semaforo
-            
             Jobs=0;
             //Contamos trabajos a realizar
             if (NEc > 0) Jobs++;
@@ -126,10 +121,7 @@ void buildTree(struct Node* node, double* shrdBuff, int *indexes, int n, int MTh
             }
             RemainingThreads = MThreads - Jobs;         //se calculan los hilos sobrantes
             if (RemainingThreads < 0) RemainingThreads = 0;
-            
-            sem_post(&sem);                             //se desbloquea el semaforo
-            sem_destroy(&sem);                          //se destruye el semaforo
-            
+
             MiTids = malloc (sizeof(pthread_t)*NewThreads);
             if (MiTids == NULL) {
                 perror("Error reservar Tids vector.");
@@ -160,11 +152,9 @@ void buildTree(struct Node* node, double* shrdBuff, int *indexes, int n, int MTh
                 MiJobs[CurrentJob].Threads = RemainingThreads/PendingThreads;       //se le asignan los hilos sobrantes
                 if(pthread_create(&(MiTids[CurrentJob]), NULL, (void *(*)(void *)) buildTreeThread, (void*) &(MiJobs[CurrentJob]))!=0)
                     perror("Error crear hilo");
-                pthread_mutex_lock(&mutex);                             //se bloquea el mutex
                 RemainingThreads -= MiJobs[CurrentJob].Threads;
                 PendingThreads--;
                 CurrentJob++;
-                pthread_mutex_unlock(&mutex);                           //se desbloquea el mutex
             } else {                                                    //si no quedan hilos disponibles
                 buildTree(node->children[0], shrdBuff, NEi, NEc, PendingThreads);
             }
@@ -216,11 +206,9 @@ void buildTree(struct Node* node, double* shrdBuff, int *indexes, int n, int MTh
                 MiJobs[CurrentJob].Threads = RemainingThreads/PendingThreads;
                 if(pthread_create(&(MiTids[CurrentJob]), NULL, (void *(*)(void *)) buildTreeThread, (void*) &(MiJobs[CurrentJob]))!=0)
                     perror("Error crear hilo");
-                pthread_mutex_lock(&mutex);                             //se bloquea el mutex
                 RemainingThreads -= MiJobs[CurrentJob].Threads;
                 PendingThreads--;
                 CurrentJob++;
-                pthread_mutex_unlock(&mutex);                           //se desbloquea el mutex
             } else {
                 buildTree(node->children[2], shrdBuff, SWi, SWc, PendingThreads);
             }
@@ -243,11 +231,9 @@ void buildTree(struct Node* node, double* shrdBuff, int *indexes, int n, int MTh
                 MiJobs[CurrentJob].Threads = RemainingThreads/PendingThreads;
                 if(pthread_create(&(MiTids[CurrentJob]), NULL, (void *(*)(void *)) buildTreeThread, (void*) &(MiJobs[CurrentJob]))!=0)
                     perror("Error crear hilo");
-                pthread_mutex_lock(&mutex);                             //se bloquea el mutex
                 RemainingThreads -= MiJobs[CurrentJob].Threads;
                 PendingThreads--;
                 CurrentJob++;
-                pthread_mutex_unlock(&mutex);                           //se desbloquea el mutex
             } else {                                                       //Si no hay hilos disponibles
                 buildTree(node->children[3], shrdBuff, SEi, SEc, PendingThreads);
             }
@@ -273,7 +259,6 @@ void buildTree(struct Node* node, double* shrdBuff, int *indexes, int n, int MTh
     for (int c = 0; c < NewThreads; c++) {
         if(pthread_join(MiTids[c], NULL)!=0) perror("Error join");      //Esperamos a que terminen los hilos
     }
-    pthread_mutex_destroy(&mutex);
 }
 
 void *buildTreeThread (threadBTptr job){
@@ -493,6 +478,8 @@ int main(int argc, char *argv[]){
     {
         possiblePthreas = atoi(argv[4]);
     }
+
+
     int nLocal=nShared;
     int nOriginal=nShared;
     //Buffer to hold velocity in x and y, and acceleration in x and y also
