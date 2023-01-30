@@ -1,8 +1,7 @@
 # Default ignored files
 /shelf/
 /workspace.xml
-#Ignore the res folder
-NBody_BarnesHut/res/
+**.out
 # Editor-based HTTP Client requests
 /httpRequests/
 # Datasource local storage ignored files
