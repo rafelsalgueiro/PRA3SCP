@@ -762,6 +762,15 @@ int main(int argc, char *argv[]){
     sprintf(filename,"./res/galaxy_%dB_%di_final.out",nOriginal, count-1);
     SaveGalaxyFile(filename, nShared, indexes, sharedBuff);
 
+    // Free memory.
+    sem_destroy(&initCalculateForce);
+    sem_destroy(&endCalculateForceAndMoveParticle);
+    pthread_barrier_destroy(&itBarrier);
+    pthread_barrier_destroy(&CalculateForceEndBarrier);
+    pthread_mutex_destroy(&staticsMutex);
+    pthread_mutex_destroy(&globalVariablesMutex);
+
+
 	free(sharedBuff);
 	free(localBuff);
 	free(radius);
