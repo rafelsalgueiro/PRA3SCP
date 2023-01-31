@@ -54,6 +54,7 @@ struct Node{
 struct globalVariables{
     struct Node* tree;
     int nShared;
+    int nLocal;
 	int steps;
     double *sharedBuff;
     double *localBuff;
@@ -422,18 +423,14 @@ void threadFunction(globalVariablesPtr gV){
     int *indexes = gV->indexes;
     double *sharedBuff = gV->sharedBuff;
     double *localBuff = gV->localBuff;
+    int nLocal = gV->nLocal;
 
     int from;
     int to;
     int particlesPerThread = nShared/possibleThreads;
-    printf ("nShared: %d", nShared);
-    printf ("id: %d\n", id);
     from = (id-1) * particlesPerThread;
     to = from + particlesPerThread;
-    printf ("possibleThreads: %d", possibleThreads);
     if (id != possibleThreads ) to--;
-    printf ("from: %d\n", from);
-    printf ("to: %d\n", to);
     while (1){
 
     }
@@ -571,6 +568,7 @@ int main(int argc, char *argv[]){
         globalVars[i].tree = tree;
         globalVars[i].steps = steps;
         globalVars[i].id = i+1;
+        globalVars[i].nLocal = nLocal;
 
         if (pthread_create(&threads[i], NULL, (void *(*)(void *)) threadFunction, (void *)&globalVars[i])){
             perror("Error creating threads");
