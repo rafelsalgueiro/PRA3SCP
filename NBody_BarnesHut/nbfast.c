@@ -80,12 +80,12 @@ globalVariablesPtr globalVars;
 
 //Variables de sincronización
 sem_t initCalculateForce;
-sem_t endCalculateForce;
+sem_t endCalculateForceAndMoveParticle;
 pthread_barrier_t itBarrier;
 pthread_barrier_t CalculateForceEndBarrier;
 pthread_mutex_t staticsMutex = PTHREAD_MUTEX_INITIALIZER;
-sem_t initMoveParticles;
-sem_t endMoveParticles;
+pthread_mutex_t globalVariablesMutex = PTHREAD_MUTEX_INITIALIZER;
+
 
 
 
@@ -425,17 +425,16 @@ void ReadGalaxyFile(char *filename, int *nShared, int **indexes, double **shared
 
 void threadFunction(globalVariablesPtr gV){
     //unpack global variables
-    fflush(stdout);
-    struct Node* tree = gV->tree;
+    pthread_mutex_lock(&globalVariablesMutex);
+    struct Node* tree;
     int id = gV->id;
     int possibleThreads = gV->possibleThreads;
     int nShared = gV->nShared;
     int steps = gV->steps;
-    int *indexes = gV->indexes;
-    double *sharedBuff = gV->sharedBuff;
-    double *localBuff = gV->localBuff;
+    int *indexes;
+    double *sharedBuff;
+    double *localBuff;
     int nLocal = gV->nLocal;
-
 
     int countIteration = 0;
     int from;
@@ -444,12 +443,22 @@ void threadFunction(globalVariablesPtr gV){
     from = (id-1) * particlesPerThread;
     to = from + particlesPerThread;
     if (id != possibleThreads ) to--;
+    pthread_mutex_unlock(&globalVariablesMutex);
+
     while (1){
+        int blockedThreads = pthread_barrier_wait(&itBarrier);        
+        localBuff = gV->localBuff;
+        indexes = gV->indexes;
+        sharedBuff = gV->sharedBuff;
+        tree = gV->tree;
+        sem_wait(&initCalculateForce);
+
         int i = 0;
         for(i=from; i < to; i++){
             //Set initial accelerations to zero
             localBuff[AX(indexes[i])]=0;
             localBuff[AY(indexes[i])]=0;
+
             int s;
             for(s=0;s<4;s++){
                 //Recursively calculate accelerations
@@ -458,14 +467,16 @@ void threadFunction(globalVariablesPtr gV){
                     calculateForce(tree->children[s], sharedBuff, localBuff, indexes[i]);
                 }
             }
+            //pthread_barrier_wait(&CalculateForceEndBarrier);
             //Calculate new position
             moveParticle(sharedBuff,localBuff,indexes[i]);
 
-            if (sharedBuff[PX(indexes[i])]<=0 || sharedBuff[PX(indexes[i])]>=1 || sharedBuff[PY(indexes[i])] <=0 || sharedBuff[PY(indexes[i])] >= 1) {
+            /*if (sharedBuff[PX(indexes[i])]<=0 || sharedBuff[PX(indexes[i])]>=1 || sharedBuff[PY(indexes[i])] <=0 || sharedBuff[PY(indexes[i])] >= 1) {
                 // If the particle is out of the limits, we count it for the statistics.
              //   removedParticles++;
-            }
+            }*/
         }
+        if (blockedThreads == PTHREAD_BARRIER_SERIAL_THREAD) sem_post(&endCalculateForceAndMoveParticle);
         countIteration++;
         if (countIteration > steps){
             pthread_exit(NULL);
@@ -512,10 +523,7 @@ int main(int argc, char *argv[]){
     
     //inicializacion de las variables de condicion
     sem_init (&initCalculateForce, 0, 0);
-    sem_init (&endCalculateForce, 0, 0);
-    sem_init (&initMoveParticles, 0, 0);
-    sem_init (&endMoveParticles, 0, 0);
-
+    sem_init (&endCalculateForceAndMoveParticle, 0, 0);
     pthread_barrier_init(&itBarrier, NULL, possiblePthreads);
     pthread_barrier_init(&CalculateForceEndBarrier, NULL, possiblePthreads);
 
@@ -650,6 +658,19 @@ int main(int argc, char *argv[]){
 			//We build the tree, which needs a pointer to the initial node, the buffer holding position and mass of the particles, indexes and number of particles
         	buildTree(tree,sharedBuff,indexes,nShared, possiblePthreads);
         	//Now that it is built, we calculate the forces per particle
+            for (int i = 0; i < possiblePthreads; i++){
+                globalVars[i].localBuff = localBuff;
+                globalVars[i].indexes = indexes;
+                globalVars[i].sharedBuff = sharedBuff;
+                globalVars[i].tree = tree;
+            }
+            for (int a = 0; a < possiblePthreads; a++){
+                sem_post(&initCalculateForce);
+            }
+
+            sem_wait(&endCalculateForceAndMoveParticle);
+
+            /*
 			for(i=0;i<nLocal;i++){
 				//First we make them zero in both directions
             	localBuff[AX(indexes[i])]=0;
@@ -672,7 +693,7 @@ int main(int argc, char *argv[]){
                 	}
                 	i--;
             	}
-        	}
+        	}*/
 
             SaveGalaxy(count, nShared, indexes, sharedBuff);
 
@@ -703,8 +724,19 @@ int main(int argc, char *argv[]){
 		//system("mkdir res");
     	while(count<=steps){
 			//First we build the tree
-        	buildTree(tree,sharedBuff,indexes,nShared, possiblePthreads);
-        	for(i=0;i<nLocal;i++){
+        	buildTree(tree,sharedBuff,indexes,nShared,possiblePthreads);
+
+            for (int i = 0; i < possiblePthreads; i++){
+                globalVars[i].localBuff = localBuff;
+                globalVars[i].indexes = indexes;
+                globalVars[i].sharedBuff = sharedBuff;
+                globalVars[i].tree = tree;
+            }
+            for (int a = 0; a < possiblePthreads; a++){
+                sem_post(&initCalculateForce);
+            }
+
+        	/*for(i=0;i<nLocal;i++){
 				//Set initial accelerations to zero
             	localBuff[AX(indexes[i])]=0;
             	localBuff[AY(indexes[i])]=0;
@@ -726,7 +758,8 @@ int main(int argc, char *argv[]){
                 	}
                 	i--;
             	}
-        	}
+        	}*/
+            sem_wait(&endCalculateForceAndMoveParticle);
 			
 			//To be able to store the positions of the particles
             ShowWritePartialResults(count,nOriginal, nShared, indexes, sharedBuff);
