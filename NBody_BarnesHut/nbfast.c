@@ -446,12 +446,17 @@ void threadFunction(globalVariablesPtr gV){
     pthread_mutex_unlock(&globalVariablesMutex);
 
     while (1){
-        int blockedThreads = pthread_barrier_wait(&itBarrier);        
+        sem_wait(&initCalculateForce);                                  //Wait for the main thread to finish initializing the tree
+        int blockedThreads = pthread_barrier_wait(&itBarrier);
+
+        //unpack global variables
+        pthread_mutex_lock(&globalVariablesMutex);
         localBuff = gV->localBuff;
         indexes = gV->indexes;
         sharedBuff = gV->sharedBuff;
         tree = gV->tree;
-        sem_wait(&initCalculateForce);
+        pthread_mutex_unlock(&globalVariablesMutex);
+
 
         int i = 0;
         for(i=from; i < to; i++){
@@ -463,7 +468,7 @@ void threadFunction(globalVariablesPtr gV){
             for(s=0;s<4;s++){
                 //Recursively calculate accelerations
                 if(tree->children[s]!=NULL){
-                    // If there are free threads to be created, we execute the next recursive call concurrently.           simplifications += 
+                    // If there are free threads to be created, we execute the next recursive call concurrently.
                     calculateForce(tree->children[s], sharedBuff, localBuff, indexes[i]);
                 }
             }
@@ -471,14 +476,16 @@ void threadFunction(globalVariablesPtr gV){
             //Calculate new position
             moveParticle(sharedBuff,localBuff,indexes[i]);
 
-            /*if (sharedBuff[PX(indexes[i])]<=0 || sharedBuff[PX(indexes[i])]>=1 || sharedBuff[PY(indexes[i])] <=0 || sharedBuff[PY(indexes[i])] >= 1) {
+            if (sharedBuff[PX(indexes[i])]<=0 || sharedBuff[PX(indexes[i])]>=1 || sharedBuff[PY(indexes[i])] <=0 || sharedBuff[PY(indexes[i])] >= 1) {
                 // If the particle is out of the limits, we count it for the statistics.
-             //   removedParticles++;
-            }*/
+                // removedParticles++;
+            }
         }
-        if (blockedThreads == PTHREAD_BARRIER_SERIAL_THREAD) sem_post(&endCalculateForceAndMoveParticle);
+        if (blockedThreads == PTHREAD_BARRIER_SERIAL_THREAD){
+            sem_post(&endCalculateForceAndMoveParticle);
+        } 
         countIteration++;
-        if (countIteration > steps){
+        if (countIteration >= steps){
             pthread_exit(NULL);
         }
     }
