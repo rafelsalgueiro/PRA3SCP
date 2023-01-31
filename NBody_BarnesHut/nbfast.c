@@ -78,6 +78,16 @@ typedef struct threadBT threadBT, *threadBTptr;
 pthread_t *threads;
 globalVariablesPtr globalVars;
 
+//Variables de sincronización
+sem_t initCalculateForce;
+sem_t endCalculateForce;
+pthread_barrier_t itBarrier;
+pthread_barrier_t CalculateForceEndBarrier;
+pthread_mutex_t staticsMutex = PTHREAD_MUTEX_INITIALIZER;
+sem_t initMoveParticles;
+sem_t endMoveParticles;
+
+
 
 void *buildTreeThread (threadBTptr job);
 
@@ -415,6 +425,7 @@ void ReadGalaxyFile(char *filename, int *nShared, int **indexes, double **shared
 
 void threadFunction(globalVariablesPtr gV){
     //unpack global variables
+    fflush(stdout);
     struct Node* tree = gV->tree;
     int id = gV->id;
     int possibleThreads = gV->possibleThreads;
@@ -425,6 +436,8 @@ void threadFunction(globalVariablesPtr gV){
     double *localBuff = gV->localBuff;
     int nLocal = gV->nLocal;
 
+
+    int countIteration = 0;
     int from;
     int to;
     int particlesPerThread = nShared/possibleThreads;
@@ -432,7 +445,31 @@ void threadFunction(globalVariablesPtr gV){
     to = from + particlesPerThread;
     if (id != possibleThreads ) to--;
     while (1){
+        int i = 0;
+        for(i=from; i < to; i++){
+            //Set initial accelerations to zero
+            localBuff[AX(indexes[i])]=0;
+            localBuff[AY(indexes[i])]=0;
+            int s;
+            for(s=0;s<4;s++){
+                //Recursively calculate accelerations
+                if(tree->children[s]!=NULL){
+                    // If there are free threads to be created, we execute the next recursive call concurrently.           simplifications += 
+                    calculateForce(tree->children[s], sharedBuff, localBuff, indexes[i]);
+                }
+            }
+            //Calculate new position
+            moveParticle(sharedBuff,localBuff,indexes[i]);
 
+            if (sharedBuff[PX(indexes[i])]<=0 || sharedBuff[PX(indexes[i])]>=1 || sharedBuff[PY(indexes[i])] <=0 || sharedBuff[PY(indexes[i])] >= 1) {
+                // If the particle is out of the limits, we count it for the statistics.
+             //   removedParticles++;
+            }
+        }
+        countIteration++;
+        if (countIteration > steps){
+            pthread_exit(NULL);
+        }
     }
 }
 
@@ -473,6 +510,16 @@ int main(int argc, char *argv[]){
     char filename[100];
     int possiblePthreads = 4;
     
+    //inicializacion de las variables de condicion
+    sem_init (&initCalculateForce, 0, 0);
+    sem_init (&endCalculateForce, 0, 0);
+    sem_init (&initMoveParticles, 0, 0);
+    sem_init (&endMoveParticles, 0, 0);
+
+    pthread_barrier_init(&itBarrier, NULL, possiblePthreads);
+    pthread_barrier_init(&CalculateForceEndBarrier, NULL, possiblePthreads);
+
+
 
     printf("NBody with %d arguments.\n",argc);
     StartTime = clock();
