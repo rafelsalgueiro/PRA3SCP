@@ -434,6 +434,7 @@ void threadFunction(globalVariablesPtr gV){
     int *indexes;
     double *sharedBuff;
     double *localBuff;
+    printf("possibleThreads: %d", possibleThreads);
 
     int countIteration = 0;
     int from;
@@ -534,13 +535,9 @@ int main(int argc, char *argv[]){
     double *radius;
     int *indexes, i;
     char filename[100];
-    int possiblePthreads = 4;
+    int possibleThreads = 4;
     
-    //inicializacion de las variables de condicion
-    sem_init (&initCalculateForce, 0, 0);
-    sem_init (&endCalculateForceAndMoveParticle, 0, 0);
-    pthread_barrier_init(&itBarrier, NULL, possiblePthreads);
-    pthread_barrier_init(&CalculateForceEndBarrier, NULL, possiblePthreads);
+
 
 
 
@@ -586,10 +583,16 @@ int main(int argc, char *argv[]){
 
     if (argc>4)         //Si se le assigna un nombre de threads
     {
-        possiblePthreads = atoi(argv[4]);
+        possibleThreads = atoi(argv[4]);
     }
-    printf("NBody with %d threads.\n",possiblePthreads);
+    printf("NBody with %d threads.\n",possibleThreads);
 
+
+    //inicializacion de las variables de condicion
+    sem_init (&initCalculateForce, 0, 0);
+    sem_init (&endCalculateForceAndMoveParticle, 0, 0);
+    pthread_barrier_init(&itBarrier, NULL, possibleThreads);
+    pthread_barrier_init(&CalculateForceEndBarrier, NULL, possibleThreads);
     int nLocal=nShared;
     int nOriginal=nShared;
     //Buffer to hold velocity in x and y, and acceleration in x and y also
@@ -626,20 +629,19 @@ int main(int argc, char *argv[]){
     sprintf(filename,"./res/galaxy_%dB_initial.out",nOriginal);
     SaveGalaxyFile(filename, nShared, indexes, sharedBuff);
 
-    threads = malloc(sizeof(pthread_t) * possiblePthreads);
+    threads = malloc(sizeof(pthread_t) * possibleThreads);
     if (threads == NULL){
         perror("Error allocating memory for threads");
         exit(1);
     }
-    globalVars = malloc(sizeof(globalVariables) * possiblePthreads);
+    globalVars = malloc(sizeof(globalVariables) * possibleThreads);
     if (globalVars == NULL){
         perror("Error allocating memory for global variables");
         exit(1);
     }
 
-
-    for (int i = 0; i < possiblePthreads; i++){
-        globalVars[i].possibleThreads = possiblePthreads;
+    for (int i = 0; i < possibleThreads; i++){
+        globalVars[i].possibleThreads = possibleThreads;
         globalVars[i].nShared = nShared;
         globalVars[i].localBuff = localBuff;
         globalVars[i].indexes = indexes;
@@ -647,9 +649,10 @@ int main(int argc, char *argv[]){
         globalVars[i].tree = tree;
         globalVars[i].steps = steps;
         globalVars[i].id = i+1;
-
+        printf("possibleThreads: %d\n", globalVars[i].possibleThreads);
         if (pthread_create(&threads[i], NULL, (void *(*)(void *)) threadFunction, (void *)&globalVars[i])){
             perror("Error creating threads");
+            exit(1);
         }
     }
     int count=1;
@@ -679,15 +682,15 @@ int main(int argc, char *argv[]){
 
 			double t=glfwGetTime();
 			//We build the tree, which needs a pointer to the initial node, the buffer holding position and mass of the particles, indexes and number of particles
-        	buildTree(tree,sharedBuff,indexes,nShared, possiblePthreads);
+        	buildTree(tree,sharedBuff,indexes,nShared, possibleThreads);
         	//Now that it is built, we calculate the forces per particle
-            for (int i = 0; i < possiblePthreads; i++){
+            for (int i = 0; i < possibleThreads; i++){
                 globalVars[i].localBuff = localBuff;
                 globalVars[i].indexes = indexes;
                 globalVars[i].sharedBuff = sharedBuff;
                 globalVars[i].tree = tree;
             }
-            for (int a = 0; a < possiblePthreads; a++){
+            for (int a = 0; a < possibleThreads; a++){
                 sem_post(&initCalculateForce);
             }
 
@@ -727,15 +730,15 @@ int main(int argc, char *argv[]){
 		//system("mkdir res");
     	while(count<=steps){
 			//First we build the tree
-        	buildTree(tree,sharedBuff,indexes,nShared,possiblePthreads);
+        	buildTree(tree,sharedBuff,indexes,nShared,possibleThreads);
 
-            for (int i = 0; i < possiblePthreads; i++){
+            for (int i = 0; i < possibleThreads; i++){
                 globalVars[i].localBuff = localBuff;
                 globalVars[i].indexes = indexes;
                 globalVars[i].sharedBuff = sharedBuff;
                 globalVars[i].tree = tree;
             }
-            for (int a = 0; a < possiblePthreads; a++){
+            for (int a = 0; a < possibleThreads; a++){
                 sem_post(&initCalculateForce);
             }
 
