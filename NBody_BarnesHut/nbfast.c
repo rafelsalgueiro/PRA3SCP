@@ -444,7 +444,7 @@ void threadFunction(globalVariablesPtr gV){
     int from;
     int to;
     int particlesPerThread = nShared/possibleThreads;
-    from = (id-1) * particlesPerThread;
+    from = (id-1) * particlesPerThread;             //Calculate the particles that each thread will calculate
     to = from + particlesPerThread;
     if (id == possibleThreads){
         to = nShared;
@@ -580,18 +580,19 @@ int main(int argc, char *argv[]){
         }
     }
 
-    if (argc>4)         //Si se le assigna un nombre de threads
+    if (argc>4)         //Assignation of the number of threads
     {
         possibleThreads = atoi(argv[4]);
     }
     printf("NBody with %d threads.\n",possibleThreads);
 
 
-    //inicializacion de las variables de condicion
+    //Initialize semaphores and barriers
     sem_init (&initCalculateForce, 0, 0);
     sem_init (&endCalculateForceAndMoveParticle, 0, 0);
     pthread_barrier_init(&itBarrier, NULL, possibleThreads);
     pthread_barrier_init(&CalculateForceEndBarrier, NULL, possibleThreads);
+    
     int nLocal=nShared;
     int nOriginal=nShared;
     //Buffer to hold velocity in x and y, and acceleration in x and y also
@@ -639,7 +640,7 @@ int main(int argc, char *argv[]){
         exit(1);
     }
 
-    for (int i = 0; i < possibleThreads; i++){
+    for (int i = 0; i < possibleThreads; i++){                  //Creation of threads and their global variables
         globalVars[i].possibleThreads = possibleThreads;
         globalVars[i].nShared = nShared;
         globalVars[i].localBuff = localBuff;
@@ -683,19 +684,19 @@ int main(int argc, char *argv[]){
 			//We build the tree, which needs a pointer to the initial node, the buffer holding position and mass of the particles, indexes and number of particles
         	buildTree(tree,sharedBuff,indexes,nShared, possibleThreads);
         	//Now that it is built, we calculate the forces per particle
-            for (int i = 0; i < possibleThreads; i++){
+            for (int i = 0; i < possibleThreads; i++){                       //Setting global variables for each thread
                 globalVars[i].localBuff = localBuff;
                 globalVars[i].indexes = indexes;
                 globalVars[i].sharedBuff = sharedBuff;
                 globalVars[i].tree = tree;
             }
-            for (int a = 0; a < possibleThreads; a++){
+            for (int a = 0; a < possibleThreads; a++){          //Send the signal to start the calculation
                 sem_post(&initCalculateForce);
             }
 
-            sem_wait(&endCalculateForceAndMoveParticle);
+            sem_wait(&endCalculateForceAndMoveParticle);        //Wait for the threads to finish
 
-            tree = globalVars[0].tree;
+            tree = globalVars[0].tree;                          //Update the variables with the new values
             localBuff = globalVars[0].localBuff;
             indexes = globalVars[0].indexes;
             sharedBuff = globalVars[0].sharedBuff;
@@ -731,19 +732,19 @@ int main(int argc, char *argv[]){
 			//First we build the tree
         	buildTree(tree,sharedBuff,indexes,nShared,possibleThreads);
 
-            for (int i = 0; i < possibleThreads; i++){
+            for (int i = 0; i < possibleThreads; i++){              //Setting global variables for each thread  
                 globalVars[i].localBuff = localBuff;
                 globalVars[i].indexes = indexes;
                 globalVars[i].sharedBuff = sharedBuff;
                 globalVars[i].tree = tree;
             }
-            for (int a = 0; a < possibleThreads; a++){
+            for (int a = 0; a < possibleThreads; a++){              //Send the signal to start the calculation
                 sem_post(&initCalculateForce);
             }
 
-            sem_wait(&endCalculateForceAndMoveParticle);
+            sem_wait(&endCalculateForceAndMoveParticle);            //Wait for all threads to finish
 
-            tree = globalVars[0].tree;
+            tree = globalVars[0].tree;                              //Update the variables with the new values
             localBuff = globalVars[0].localBuff;
             indexes = globalVars[0].indexes;
             sharedBuff = globalVars[0].sharedBuff;
@@ -764,7 +765,7 @@ int main(int argc, char *argv[]){
     sprintf(filename,"./res/galaxy_%dB_%di_final.out",nOriginal, count-1);
     SaveGalaxyFile(filename, nShared, indexes, sharedBuff);
 
-    // Free memory.
+    // Destroy semaphores, barriers and mutexes.
     sem_destroy(&initCalculateForce);
     sem_destroy(&endCalculateForceAndMoveParticle);
     pthread_barrier_destroy(&itBarrier);
