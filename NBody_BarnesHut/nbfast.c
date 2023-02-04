@@ -422,6 +422,10 @@ void ReadGalaxyFile(char *filename, int *nShared, int **indexes, double **shared
     fclose(input);
 }
 
+void threadStatistics(int idThread){
+    printf("Thread %d running\n", idThread);
+}
+
 
 void threadFunction(globalVariablesPtr gV){
     //unpack global variables
@@ -478,11 +482,6 @@ void threadFunction(globalVariablesPtr gV){
 
             //Calculate new position
             moveParticle(sharedBuff,localBuff,indexes[i]);
-
-            if (sharedBuff[PX(indexes[i])]<=0 || sharedBuff[PX(indexes[i])]>=1 || sharedBuff[PY(indexes[i])] <=0 || sharedBuff[PY(indexes[i])] >= 1) {
-                // If the particle is out of the limits, we count it for the statistics.
-                // removedParticles++;
-            }
         }
 
         pthread_mutex_lock(&globalVariablesMutex);
@@ -493,8 +492,11 @@ void threadFunction(globalVariablesPtr gV){
         if (blockedThreads == PTHREAD_BARRIER_SERIAL_THREAD){
             sem_post(&endCalculateForceAndMoveParticle);
         } 
-        
-        if (countIteration >= steps){
+
+        if (countIteration % 25 == 0){                  //Show statistics every 25 iterations
+            threadStatistics(id);
+        }
+        if (countIteration >= steps){                   //If we have reached the maximum number of iterations, we finish the thread.
             pthread_exit(NULL);
         }
     }
