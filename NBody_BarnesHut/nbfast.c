@@ -540,9 +540,6 @@ int main(int argc, char *argv[]){
     int possibleThreads = 4;
     
 
-
-
-
     printf("NBody with %d arguments.\n",argc);
     StartTime = clock();
 
