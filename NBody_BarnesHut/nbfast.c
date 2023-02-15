@@ -438,31 +438,30 @@ void threadFunction(globalVariablesPtr gV){
     int *indexes;
     double *sharedBuff;
     double *localBuff;
-    printf("possibleThreads: %d", possibleThreads);
 
     int countIteration = 0;
     int from;
     int to;
-    int particlesPerThread = nShared/possibleThreads;
-    from = (id-1) * particlesPerThread;             //Calculate the particles that each thread will calculate
-    to = from + particlesPerThread;
-    if (id == possibleThreads){
-        to = nShared;
-    }
+    
     pthread_mutex_unlock(&globalVariablesMutex);
 
-    pthread_barrier_wait(&itBarrier);               //Wait all the threads to go together
-
-    while (1){  
+    while (1){
         sem_wait(&initCalculateForce);                      //Wait for the main thread to finish initializing the tree
         //unpack global variables
-        pthread_mutex_lock(&globalVariablesMutex);
         localBuff = gV->localBuff;
         indexes = gV->indexes;
         sharedBuff = gV->sharedBuff;
         tree = gV->tree;
-        pthread_mutex_unlock(&globalVariablesMutex);
 
+
+        int particlesPerThread = nShared/possibleThreads;
+        from = (id-1) * particlesPerThread;             //Calculate the particles that each thread will calculate
+        to = id * particlesPerThread;
+        if (id == possibleThreads){
+            to = nShared;
+        }
+
+        pthread_barrier_wait(&itBarrier);               //Wait all the threads to go together
         int i = 0;
         for(i=from; i < to; i++){
             //Set initial accelerations to zero
@@ -479,14 +478,31 @@ void threadFunction(globalVariablesPtr gV){
 
                 }
             }
-
+        
+            pthread_barrier_wait(&itBarrier);               //Wait all the threads to go together
+            
             //Calculate new position
             moveParticle(sharedBuff,localBuff,indexes[i]);
+
+            if(sharedBuff[PX(indexes[i])]<=0 || sharedBuff[PX(indexes[i])]>=1 || sharedBuff[PY(indexes[i])] <=0 || sharedBuff[PY(indexes[i])] >= 1){
+                int r;
+                to--;
+                nShared--;
+                for(r=i;r<to;r++){
+                	indexes[r]=indexes[r+1];
+                }
+                i--;
+
+            }
         }
 
-        pthread_mutex_lock(&globalVariablesMutex);
         countIteration++;
-        pthread_mutex_unlock(&globalVariablesMutex);
+
+        globalVars[id].nShared = nShared;
+        globalVars[id].localBuff = localBuff;
+        globalVars[id].indexes = indexes;
+        globalVars[id].sharedBuff = sharedBuff;
+        globalVars[id].tree = tree;
 
         int blockedThreads = pthread_barrier_wait(&CalculateForceEndBarrier);
         if (blockedThreads == PTHREAD_BARRIER_SERIAL_THREAD){
@@ -682,7 +698,8 @@ int main(int argc, char *argv[]){
 
 			double t=glfwGetTime();
 			//We build the tree, which needs a pointer to the initial node, the buffer holding position and mass of the particles, indexes and number of particles
-        	buildTree(tree,sharedBuff,indexes,nShared, possibleThreads);
+
+        	buildTree(tree,sharedBuff,indexes,nShared,possibleThreads);                 //*************************************************
         	//Now that it is built, we calculate the forces per particle
             for (int i = 0; i < possibleThreads; i++){                       //Setting global variables for each thread
                 globalVars[i].localBuff = localBuff;
@@ -696,10 +713,11 @@ int main(int argc, char *argv[]){
 
             sem_wait(&endCalculateForceAndMoveParticle);        //Wait for the threads to finish
 
-            tree = globalVars[0].tree;                          //Update the variables with the new values
-            localBuff = globalVars[0].localBuff;
-            indexes = globalVars[0].indexes;
-            sharedBuff = globalVars[0].sharedBuff;
+            tree = globalVars[1].tree;                          //Update the variables with the new values
+            localBuff = globalVars[1].localBuff;
+            indexes = globalVars[1].indexes;
+            sharedBuff = globalVars[1].sharedBuff;
+            nShared = globalVars[1].nShared;
 
             SaveGalaxy(count, nShared, indexes, sharedBuff);
 
@@ -744,10 +762,11 @@ int main(int argc, char *argv[]){
 
             sem_wait(&endCalculateForceAndMoveParticle);            //Wait for all threads to finish
 
-            tree = globalVars[0].tree;                              //Update the variables with the new values
-            localBuff = globalVars[0].localBuff;
-            indexes = globalVars[0].indexes;
-            sharedBuff = globalVars[0].sharedBuff;
+            tree = globalVars[1].tree;                              //Update the variables with the new values
+            localBuff = globalVars[1].localBuff;
+            indexes = globalVars[1].indexes;
+            sharedBuff = globalVars[1].sharedBuff;
+            nShared = globalVars[1].nShared;
 			//To be able to store the positions of the particles
             ShowWritePartialResults(count,nOriginal, nShared, indexes, sharedBuff);
             //We advance one step
