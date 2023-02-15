@@ -454,6 +454,7 @@ void threadFunction(int id){
         indexes = globalVars->indexes;
         sharedBuff = globalVars->sharedBuff;
         tree = globalVars->tree;
+        nShared = globalVars-> nShared;
 
 
         int particlesPerThread = nShared/possibleThreads;
@@ -481,22 +482,13 @@ void threadFunction(int id){
                 }
             }
         
-            pthread_barrier_wait(&itBarrier);               //Wait all the threads to go together
             
             //Calculate new position
             moveParticle(sharedBuff,localBuff,indexes[i]);
 
-            pthread_barrier_wait(&itBarrier);               //Wait all the threads to go together
 
         }
        
-        pthread_mutex_lock(&globVal);
-        globalVars->nShared = nShared;
-        globalVars->indexes = indexes;
-        globalVars->sharedBuff = sharedBuff;
-        globalVars->localBuff = localBuff;
-        globalVars->tree = tree;
-        pthread_mutex_unlock(&globVal);
         countIteration++;
 
 
