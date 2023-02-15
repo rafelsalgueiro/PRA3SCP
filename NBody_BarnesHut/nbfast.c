@@ -84,6 +84,7 @@ sem_t endCalculateForceAndMoveParticle;
 pthread_barrier_t itBarrier;
 pthread_barrier_t CalculateForceEndBarrier;
 pthread_mutex_t statisticsMutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t globVal = PTHREAD_MUTEX_INITIALIZER;
 
 
 
@@ -422,8 +423,9 @@ void ReadGalaxyFile(char *filename, int *nShared, int **indexes, double **shared
     fclose(input);
 }
 
-void threadStatistics(int idThread){
+void threadStatistics(int idThread, int particlesEvaluated[]){
     printf("Thread %d\n", idThread);
+    printf("Particles evaluated: %d\n", particlesEvaluated[idThread-1]);
 }
 
 
@@ -436,6 +438,9 @@ void threadFunction(int id){
     int *indexes;
     double *sharedBuff;
     double *localBuff;
+    
+    int particlesEvaulated[possibleThreads];
+    particlesEvaulated[id-1] = 0;
 
     int countIteration = 0;
     int from;
@@ -457,7 +462,7 @@ void threadFunction(int id){
         if (id == possibleThreads){
             to = nShared;
         }
-
+        particlesEvaulated[id-1] += (to-from);
         pthread_barrier_wait(&itBarrier);               //Wait all the threads to go together
         int i = 0;
         for(i=from; i < to; i++){
@@ -481,26 +486,32 @@ void threadFunction(int id){
             //Calculate new position
             moveParticle(sharedBuff,localBuff,indexes[i]);
 
-        }
+            pthread_barrier_wait(&itBarrier);               //Wait all the threads to go together
 
+        }
+       
+        pthread_mutex_lock(&globVal);
         globalVars->nShared = nShared;
         globalVars->indexes = indexes;
         globalVars->sharedBuff = sharedBuff;
         globalVars->localBuff = localBuff;
         globalVars->tree = tree;
-
+        pthread_mutex_unlock(&globVal);
         countIteration++;
+
+
+
+        if (countIteration % 25 == 0){                  //Show statistics every 25 iterations
+            pthread_mutex_lock(&statisticsMutex);
+            threadStatistics(id,particlesEvaulated);
+            pthread_mutex_unlock(&statisticsMutex);
+        }
 
         int blockedThreads = pthread_barrier_wait(&CalculateForceEndBarrier);
         if (blockedThreads == PTHREAD_BARRIER_SERIAL_THREAD){
             sem_post(&endCalculateForceAndMoveParticle);
         } 
 
-        if (countIteration % 25 == 0){                  //Show statistics every 25 iterations
-            pthread_mutex_lock(&statisticsMutex);
-            threadStatistics(id);
-            pthread_mutex_unlock(&statisticsMutex);
-        }
         if (countIteration >= steps){                   //If we have reached the maximum number of iterations, we finish the thread.
             pthread_exit(NULL);
         }
@@ -686,8 +697,6 @@ int main(int argc, char *argv[]){
 			double t=glfwGetTime();
 			//We build the tree, which needs a pointer to the initial node, the buffer holding position and mass of the particles, indexes and number of particles
 
-            printf("nShared before buildtree: %d\n",nShared);
-            fflush(stdout);
             buildTree(tree,sharedBuff,indexes,nShared,possibleThreads);
             
         	//Now that it is built, we calculate the forces per particle
@@ -697,9 +706,8 @@ int main(int argc, char *argv[]){
             for (int a = 0; a < possibleThreads; a++){          //Send the signal to start the calculation
                 sem_post(&initCalculateForce);
             }
-
+            
             sem_wait(&endCalculateForceAndMoveParticle);        //Wait for the threads to finish
-
             
             tree = globalVars->tree;                              //Update the variables with the new values
             localBuff = globalVars->localBuff;
@@ -707,8 +715,6 @@ int main(int argc, char *argv[]){
             sharedBuff = globalVars->sharedBuff;
             nShared = globalVars->nShared;
             
-            printf("nShared from globalVars: %d\n",nShared);
-            fflush(stdout);
 
             for (i = 0; i <nLocal; ++i) {
                 //Kick out particle if it went out of the box (0,1)x(0,1)
@@ -722,8 +728,7 @@ int main(int argc, char *argv[]){
                     i--;
                 }
             }
-            printf("nShared after kickout: %d\n",nShared);
-            fflush(stdout);
+            globalVars->nShared = nShared;
 
 
             SaveGalaxy(count, nShared, indexes, sharedBuff);
@@ -757,23 +762,36 @@ int main(int argc, char *argv[]){
 			//First we build the tree
         	buildTree(tree,sharedBuff,indexes,nShared,possibleThreads);
 
-            //Setting global variables
-            globalVars->localBuff = localBuff;
+            //Now that it is built, we calculate the forces per particle
             globalVars->indexes = indexes;
             globalVars->sharedBuff = sharedBuff;
             globalVars->tree = tree;
-        
-            for (int a = 0; a < possibleThreads; a++){              //Send the signal to start the calculation
+
+            for (int a = 0; a < possibleThreads; a++){          //Send the signal to start the calculation
                 sem_post(&initCalculateForce);
             }
 
-            sem_wait(&endCalculateForceAndMoveParticle);            //Wait for all threads to finish
-
+            sem_wait(&endCalculateForceAndMoveParticle);        //Wait for the threads to finish
+            
             tree = globalVars->tree;                              //Update the variables with the new values
             localBuff = globalVars->localBuff;
             indexes = globalVars->indexes;
             sharedBuff = globalVars->sharedBuff;
             nShared = globalVars->nShared;
+
+            for (i = 0; i <nLocal; ++i) {
+                //Kick out particle if it went out of the box (0,1)x(0,1)
+                if(sharedBuff[PX(indexes[i])]<=0 || sharedBuff[PX(indexes[i])]>=1 || sharedBuff[PY(indexes[i])] <=0 || sharedBuff[PY(indexes[i])] >= 1){
+                    int r;
+                    nLocal--;
+                    nShared--;
+                    for(r=i;r<nLocal;r++){
+                        indexes[r]=indexes[r+1];
+                    }
+                    i--;
+                }
+            }
+            globalVars->nShared = nShared;
 
 			//To be able to store the positions of the particles
             ShowWritePartialResults(count,nOriginal, nShared, indexes, sharedBuff);

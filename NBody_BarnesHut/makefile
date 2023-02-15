@@ -5,8 +5,8 @@ CC=gcc
 
 # add D_GLFW_SUPPORT define for GUI based on GLFW
 
-cxxflags.gui = -pg -O2 -c -Wall -D D_GLFW_SUPPORT
-cxxflags.no_gui = -pg -O2 -c -Wall
+cxxflags.gui = -pg -O2 -c -Wall -D D_GLFW_SUPPORT -g
+cxxflags.no_gui = -pg -O2 -c -Wall -g
 CFLAGS = ${cxxflags.${BUILD}}
 lddflags.gui = -lm -lGL -lGLU -lglfw3 -lX11 -lXxf86vm -lpthread -ldl -lXrandr -lXi -lXinerama -lXcursor
 lddflags.no_gui = -lm -lpthread -ldl
